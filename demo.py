@@ -1,6 +1,7 @@
 #!/usr/bin/python
 import numpy as np
 import cv2
+from multi_band_blending import multi_band_blending
 
 
 def buildmap_pgm(pgm_addr):
@@ -51,6 +52,12 @@ def buildmap(Ws, Hs, Wd, Hd, hfovd=160.0, vfovd=160.0):
             map_y.itemset((y, x), int(yS))
 
     return map_x, map_y
+
+
+def rotate(img, theta):
+    M = cv2.getRotationMatrix2D((640, 640), theta, 1)
+    result = cv2.warpAffine(img, M, (1280, 1280))
+    return result
 
 
 def pad(img, pxs, flags):
@@ -118,6 +125,10 @@ if __name__ == "__main__":
     while(cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
+            # Rotation
+            frame = np.append(frame[:, :1280, :], rotate(
+                frame[:, 1280:, :], -0.5), axis=1)
+
             # Padding
             frame = pad(frame, 5, cv2.BORDER_REFLECT_101)
 
@@ -125,10 +136,13 @@ if __name__ == "__main__":
             frame = cv2.remap(frame, xmap, ymap, cv2.INTER_LINEAR)
 
             # Vertical alignment
-            frame = y_align(frame, 3)
+            #frame = y_align(frame, 3)
 
-            # Pivot smoothing
-            frame = pivot_smooth(frame, (10, 10), 10, False)
+            # Pivot smoothing / blending
+            #frame = pivot_smooth(frame, (10, 10), 10, False)
+            frame = cv2.resize(multi_band_blending(
+                frame[:, :1280, :], frame[:, 1280:, :], 5), (2560, 1280))
+            frame = frame.astype(np.uint8)
 
             # Write the remapped frame
             out.write(frame)
