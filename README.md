@@ -12,7 +12,17 @@ A summer research project to seamlessly stitch dual-fisheye video into 360-degre
 ## Run
 
 ```
-python demo.py
+python demo.py [-h] [-o OUTPUT.XYZ] INPUT.XYZ
+```
+
+```
+positional arguments:
+  INPUT.XYZ             path to the input dual fisheye video
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -o OUTPUT.XYZ, --output OUTPUT.XYZ
+                        path to the output equirectangular video
 ```
 
 ## References
