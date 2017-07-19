@@ -1,6 +1,8 @@
 #!/usr/bin/python
 import numpy as np
 import cv2
+import sys
+import argparse
 from multi_band_blending import multi_band_blending
 
 
@@ -107,12 +109,12 @@ def pivot_smooth(img, shape, wd, flags):
     return result
 
 
-if __name__ == "__main__":
-    cap = cv2.VideoCapture('360_0080.MP4')
+def main(input, output):
+    cap = cv2.VideoCapture(input)
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter('output.MP4', fourcc, 30.0, (2560, 1280))
+    out = cv2.VideoWriter(output, fourcc, 30.0, (2560, 1280))
 
     # Obtain xmap and ymap
     xmap = buildmap_pgm(
@@ -157,3 +159,16 @@ if __name__ == "__main__":
     cap.release()
     out.release()
     cv2.destroyAllWindows()
+
+
+if __name__ == '__main__':
+    # construct the argument parse and parse the arguments
+    ap = argparse.ArgumentParser(
+        description="A summer research project to seamlessly stitch dual-fisheye video into 360-degree videos")
+    ap.add_argument('input', metavar='INPUT.XYZ',
+                    help="path to the input dual fisheye video")
+    ap.add_argument('-o', '--output', metavar='OUTPUT.XYZ', required=False, default='output.MP4',
+                    help="path to the output equirectangular video")
+
+    args = vars(ap.parse_args())
+    main(args['input'], args['output'])
