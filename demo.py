@@ -4,6 +4,7 @@ import cv2
 import sys
 import argparse
 from multi_band_blending import multi_band_blending
+from stitch import stitch
 
 
 def buildmap_pgm(pgm_addr):
@@ -109,6 +110,33 @@ def pivot_smooth(img, shape, wd, flags):
     return result
 
 
+def pivot_stitch(img, wd):
+    # Stitch the area in between
+    D = stitch(img[:, 1280 - wd:1280], img[:, 1280:1280 + wd], sigma=15.0)
+
+    # Warp backwards
+    pt1 = np.dot(D['H'], [wd, 400, 1])
+    pt3 = np.dot(D['H'], [wd, 800, 1])
+    pt1 = pt1 / pt1[2]
+    pt3 = pt3 / pt3[2]
+    src = np.zeros((4, 2), np.float32)
+    dst = np.zeros((4, 2), np.float32)
+    src[0] = [0, 0]
+    src[1] = pt1[:2]
+    src[2] = [0, 1280]
+    src[3] = pt3[:2]
+    dst = np.array(src)
+    dst[1] = [2 * wd - 1, 400]
+    dst[3] = [2 * wd - 1, 800]
+
+    result = np.copy(img)
+    M = cv2.getPerspectiveTransform(src, dst)
+    result[:, 1280 - wd:1280 +
+           wd] = cv2.warpPerspective(D['res'], M, (2 * wd, 1280))
+    result[:, 1280 - wd:1280 + wd] = D['res']
+    return result
+
+
 def main(input, output):
     cap = cv2.VideoCapture(input)
 
@@ -118,27 +146,30 @@ def main(input, output):
 
     # Obtain xmap and ymap
     xmap = buildmap_pgm(
-        './Remap Filter/Samsung Gear 2560x1280/xmap_samsung_gear_2560x1280.pgm')
+        './RemapFilter/Samsung Gear 2560x1280/xmap_samsung_gear_2560x1280.pgm')
     ymap = buildmap_pgm(
-        './Remap Filter/Samsung Gear 2560x1280/ymap_samsung_gear_2560x1280.pgm')
+        './RemapFilter/Samsung Gear 2560x1280/ymap_samsung_gear_2560x1280.pgm')
     #xmap, ymap = buildmap(2560, 1280, 2560, 1280)
 
     # Perform remap for each frame
     while(cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            # Rotation
+            # Fisheye rotation
             frame = np.append(frame[:, :1280, :], rotate(
                 frame[:, 1280:, :], -0.5), axis=1)
 
-            # Padding
+            # Fisheye padding
             frame = pad(frame, 5, cv2.BORDER_REFLECT_101)
 
-            # Remapping
+            # Remapping, fisheye -> equirectangular
             frame = cv2.remap(frame, xmap, ymap, cv2.INTER_LINEAR)
 
             # Vertical alignment
-            #frame = y_align(frame, 3)
+            frame = y_align(frame, 3)
+
+            # Stitching
+            #frame = pivot_stitch(frame, 200)
 
             # Pivot smoothing / blending
             #frame = pivot_smooth(frame, (10, 10), 10, False)

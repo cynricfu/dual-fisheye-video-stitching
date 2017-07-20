@@ -5,10 +5,9 @@ from multi_band_blending import multi_band_blending
 
 class Stitcher:
     def __init__(self):
-        print cv2.__version__
+        pass
 
-    def stitch(self, images, ratio=0.75, reprojThresh=2.0, sigma=2.0,
-               levels=None, showMatches=False):
+    def stitch(self, images, ratio=0.75, reprojThresh=2.0, sigma=2.0, levels=None):
         # unpack the images, then detect keypoints and extract
         # local invariant descriptors from them
         (imageA, imageB) = images
@@ -37,15 +36,9 @@ class Stitcher:
             subA, subB, overlap_w=imageA.shape[1] + imageB.shape[1], sigma=sigma, levels=levels)
         result = result.astype(np.uint8)
 
-        # check to see if the keypoint matches should be visualized
-        if showMatches:
-            vis = self.drawMatches(imageA, imageB, kpsA, kpsB, matches,
-                                   status)
-            # return a tuple of the stitched image and the visualization
-            return (result, vis)
-        else:
-            # return the stitched image
-            return result
+        # return stitching result, matches visualization and homography matrix
+        vis = self.drawMatches(imageA, imageB, kpsA, kpsB, matches, status)
+        return {'res': result, 'vis': vis, 'H': H}
 
     def detectAndDescribe(self, image):
         # check to see if we are using OpenCV 3.X

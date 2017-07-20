@@ -1,10 +1,10 @@
 #!/usr/bin/python
-from stitcher import Stitcher
-import argparse
 import cv2
+import argparse
+from stitcher import Stitcher
 
 
-def stitch(img1, img2, sigma, levels, flag_fast):
+def stitch(img1, img2, sigma=2.0, levels=None, flag_fast=False):
     if flag_fast:
         if img1.shape[1] > 400:
             img1 = cv2.resize(
@@ -15,8 +15,7 @@ def stitch(img1, img2, sigma, levels, flag_fast):
 
     # stitch the images together to create a panorama
     stitcher = Stitcher()
-    return stitcher.stitch([img1, img2], sigma=sigma, levels=levels,
-                           showMatches=True)
+    return stitcher.stitch([img1, img2], sigma=sigma, levels=levels)
 
 
 if __name__ == '__main__':
@@ -49,9 +48,8 @@ if __name__ == '__main__':
         print "there aren't enough matched keypoints to create a panorama"
     else:
         # show the images
-        result, vis = resvis
         cv2.imshow("Image A", img1)
         cv2.imshow("Image B", img2)
-        cv2.imshow("Keypoint Matches", vis)
-        cv2.imshow("Result", result)
+        cv2.imshow("Keypoint Matches", resvis['vis'])
+        cv2.imshow("Result", resvis['res'])
         cv2.waitKey(0)
