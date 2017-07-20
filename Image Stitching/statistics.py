@@ -69,8 +69,8 @@ def FlannMatch_SIFT(img1, img2):
 
 
 if __name__ == "__main__":
-    img_l = cv2.imread('l.png', cv2.IMREAD_COLOR)
-    img_r = cv2.imread('r.png', cv2.IMREAD_COLOR)
+    img_l = cv2.imread('extract_l.png', cv2.IMREAD_COLOR)
+    img_r = cv2.imread('extract_r.png', cv2.IMREAD_COLOR)
 
     # Brute force matching with SIFT and ratio test
     kp1, kp2, good = BFMatch_SIFT(img_l, img_r)

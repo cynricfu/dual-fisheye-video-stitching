@@ -124,8 +124,6 @@ if __name__ == "__main__":
                           Hd=1280, hfovd=160, vfovd=160)
     result_l = cv2.remap(img[:, 0:1280, :], xmap, ymap, cv2.INTER_LINEAR)
     result_r = cv2.remap(img[:, 1280:2560, :], xmap, ymap, cv2.INTER_LINEAR)
-    cv2.imwrite('l.png', result_l)
-    cv2.imwrite('r.png', result_r)
 
     # Brute force matching with ORB
     kp1, kp2, matches = BFMatch_ORB(result_l, result_r)
