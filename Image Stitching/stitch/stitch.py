@@ -15,7 +15,7 @@ args = vars(ap.parse_args())
 
 # load the two images and resize them to have a width of 400 pixels
 # (for faster processing)
-width = 1280
+width = 200
 imageA = cv2.imread(args["first"])
 imageB = cv2.imread(args["second"])
 imageA = cv2.resize(

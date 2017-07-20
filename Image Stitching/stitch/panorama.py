@@ -2,12 +2,13 @@
 import numpy as np
 #import imutils
 import cv2
+from multi_band_blending import *
 
 class Stitcher:
     def __init__(self):
         print cv2.__version__
 
-    def stitch(self, images, ratio=0.75, reprojThresh=4.0,
+    def stitch(self, images, ratio=0.75, reprojThresh=2.0,
         showMatches=False):
         # unpack the images, then detect keypoints and extract
         # local invariant descriptors from them
@@ -26,9 +27,16 @@ class Stitcher:
         # otherwise, apply a perspective warp to stitch the images
         # together
         (matches, H, status) = M
-        result = cv2.warpPerspective(imageB, H,
+        #result = cv2.warpPerspective(imageB, H,
+        #    (imageA.shape[1] + imageB.shape[1], imageB.shape[0]))
+        #result[0:imageA.shape[0], 0:imageA.shape[1]] = imageA
+        subB = cv2.warpPerspective(imageB, H,
             (imageA.shape[1] + imageB.shape[1], imageB.shape[0]))
-        result[0:imageA.shape[0], 0:imageA.shape[1]] = imageA
+        subA = np.zeros((imageB.shape[0], imageA.shape[1] + imageB.shape[1],3))
+        subA[0:imageA.shape[0], 0:imageA.shape[1]] = imageA
+
+        result = multi_band_blending(subA, subB, 400)
+        result = result.astype(np.uint8)
 
         # check to see if the keypoint matches should be visualized
         if showMatches:
@@ -44,7 +52,7 @@ class Stitcher:
 
     def detectAndDescribe(self, image):
         # convert the image to grayscale
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
         # check to see if we are using OpenCV 3.X
         if int(cv2.__version__[0]) >= 3:
@@ -71,21 +79,35 @@ class Stitcher:
 
     def matchKeypoints(self, kpsA, kpsB, featuresA, featuresB,
         ratio, reprojThresh):
-        # compute the raw matches and initialize the list of actual
-        # matches
-        matcher = cv2.DescriptorMatcher_create("BruteForce")
-        rawMatches = matcher.knnMatch(featuresA, featuresB, 2)
+        # FLANN parameters
+        FLANN_INDEX_KDTREE = 0
+        index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
+        search_params = dict(checks=50)   # or pass empty dictionary
+
+        flann = cv2.FlannBasedMatcher(index_params, search_params)
+
+        rawMatches = flann.knnMatch(featuresA, featuresB, k=2)
+
         matches = []
 
-        # loop over the raw matches
         for m, n in rawMatches:
+            if m.distance < ratio * n.distance:
+                #if kpsA[m.queryIdx, 0] > 1130 and kpsA[m.queryIdx, 1] > 440 and kpsA[m.queryIdx, 1] < 840:
+                    matches.append((m.trainIdx, m.queryIdx))
+
+        # compute the raw matches and initialize the list of actual
+        # matches
+        #matcher = cv2.DescriptorMatcher_create("BruteForce")
+        #rawMatches = matcher.knnMatch(featuresA, featuresB, 2)
+        #matches = []
+
+        # loop over the raw matches
+        #for m, n in rawMatches:
             # ensure the distance is within a certain ratio of each
             # other (i.e. Lowe's ratio test)
-            if m.distance < n.distance * ratio:
-                matches.append((m.trainIdx, m.queryIdx))
+            #if m.distance < n.distance * ratio:
+                #matches.append((m.trainIdx, m.queryIdx))
 
-        #thrd = 1120
-        #matches = [m for m in matches if kpsA[m[1],0]>thrd]
         # computing a homography requires at least 4 matches
         if len(matches) > 4:
             # construct the two sets of points
