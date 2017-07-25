@@ -160,7 +160,7 @@ def main(input, output):
                 frame[:, 1280:, :], -0.5), axis=1)
 
             # Fisheye padding
-            frame = pad(frame, 5, cv2.BORDER_REFLECT_101)
+            frame = pad(frame, 10, cv2.BORDER_REFLECT_101)
 
             # Remapping, fisheye -> equirectangular
             frame = cv2.remap(frame, xmap, ymap, cv2.INTER_LINEAR)
@@ -174,8 +174,12 @@ def main(input, output):
             # Pivot smoothing / blending
             #frame = pivot_smooth(frame, (10, 10), 10, False)
             frame = cv2.resize(multi_band_blending(
-                frame[:, :1280, :], frame[:, 1280:, :], 5), (2560, 1280))
+                frame[:, :1280, :], frame[:, 1280:, :], overlap_w=20, sigma=2.0), (2560, 1280))
             frame = frame.astype(np.uint8)
+
+            ratio = 1.02
+            frame[:, 1280:] = cv2.resize(frame[:, 1280:], (1280, int(
+                1280 * ratio)))[int(1280 * (ratio - 1) / 2):int(1280 * (ratio - 1) / 2) + 1280, :]
 
             # Write the remapped frame
             out.write(frame)
