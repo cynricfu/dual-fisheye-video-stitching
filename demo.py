@@ -5,15 +5,14 @@ import sys
 import argparse
 import random
 import utils
-import multi_band_blending
 
 
 # parameters for template matching
 W_max = 1380
 offsetYL = 320
 offsetYR = 320
-maxL = 80
-maxR = 80
+maxL = 160
+maxR = 160
 
 
 def main(input, output):
@@ -25,7 +24,7 @@ def main(input, output):
 
     # Obtain xmap and ymap
     xmap, ymap = utils.buildmap_2(
-        Ws=W_max, Hs=1280, Wd=1280, Hd=1280, fov=193.0)
+        Ws=W_max, Hs=1280, Wd=1280, Hd=1280, fov=194.0)
 
     # Calculate homography from the first frame
     ret, frame = cap.read()
@@ -44,11 +43,11 @@ def main(input, output):
         matchesL = utils.getMatches_templmatch(
             cam1[offsetYL:1280 - offsetYL, 1280:],
             cam2[offsetYL:1280 - offsetYL, :W_max - 1280],
-            (24, 16), maxL)
+            (32, 16), maxL)
         matchesR = utils.getMatches_templmatch(
             cam1[offsetYR:1280 - offsetYR, :W_max - 1280],
             cam2[offsetYR:1280 - offsetYR, 1280:],
-            (24, 16), maxR)
+            (32, 16), maxR)
         print matchesL.shape[0], matchesR.shape[0]
 
         matchesL = matchesL + ((2560 - W_max) / 2, offsetYL)
@@ -69,28 +68,32 @@ def main(input, output):
         warped1[:, 2560 - W_max / 2:] = cam1[:, :W_max / 2]
         warped = np.zeros((1280, 2560, 3), np.uint8)
         warped[:] = warped2[:]
-        warped[:] = warped1[:]
+        warped[:, :W_max / 2] = warped1[:, :W_max / 2]
+        warped[:, 2560 - W_max / 2:] = warped1[:, 2560 - W_max / 2:]
 
-        # image labeling
-        mask = utils.imgLabeling(warped1[:, W_max / 2 - 80:W_max / 2],
+        # image labeling (find minimum error boundary cut)
+        mask = utils.imgLabeling2(warped1[:, W_max / 2 - 80:W_max / 2],
                                  warped2[:, W_max / 2 - 80:W_max / 2],
                                  warped1[:, 2560 - W_max /
                                          2:2560 - W_max / 2 + 80],
                                  warped2[:, 2560 - W_max /
                                          2:2560 - W_max / 2 + 80],
                                  W_max / 2 - 80, 2560 - W_max / 2)
-        labeled = warped2 * mask + warped1 * (1 - mask)
-        cv2.imshow('p', labeled.astype(np.uint8))
-        cv2.waitKey(0)
-        cv2.imwrite('labeled.png', labeled.astype(np.uint8))
+        labeled = warped1 * mask + warped2 * (1 - mask)
 
         # multi band blending
+        blended = utils.multi_band_blending(warped1, warped2, mask, 2.0)
+        cv2.imshow('p', blended.astype(np.uint8))
+        cv2.waitKey(0)
 
+        # write results from phases
         cv2.imwrite('0.png', cam1)
         cv2.imwrite('1.png', cam2)
         cv2.imwrite('2.png', shifted_cams)
         cv2.imwrite('3.png', warped2)
-        #cv2.imwrite('4.png', warped)
+        cv2.imwrite('4.png', warped)
+        cv2.imwrite('labeled.png', labeled.astype(np.uint8))
+        cv2.imwrite('blended.png', blended.astype(np.uint8))
 
     # Process each frame
     while(cap.isOpened()):
