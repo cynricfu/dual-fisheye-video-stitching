@@ -93,21 +93,20 @@ def imgLabeling2(img1, img2, img3, img4, xoffsetL, xoffsetR):
     return mask
 
 
-def GaussianPyramid(img, sigma, levels):
+def GaussianPyramid(img, leveln):
     GP = [img]
-    for i in range(levels - 1):
-        GP.append(cv2.resize(cv2.GaussianBlur(
-            GP[i], (0, 0), sigmaX=sigma, sigmaY=sigma), (GP[i].shape[1] / 2, GP[i].shape[0] / 2)))
+    for i in range(leveln - 1):
+        GP.append(cv2.pyrDown(GP[i]))
     return GP
 
 
-def LaplacianPyramid(GP):
+def LaplacianPyramid(img, leveln):
     LP = []
-    for i, G in enumerate(GP):
-        if i == len(GP) - 1:
-            LP.append(G)
-        else:
-            LP.append(G - cv2.resize(GP[i + 1], (G.shape[1], G.shape[0])))
+    for i in range(leveln - 1):
+        next_img = cv2.pyrDown(img)
+        LP.append(img - cv2.pyrUp(next_img, img.shape[1::-1]))
+        img = next_img
+    LP.append(img)
     return LP
 
 
@@ -119,34 +118,27 @@ def blend_pyramid(LPA, LPB, MP):
 
 
 def reconstruct(LS):
-    levels = len(LS)
-    R = LS[levels - 1]
-    for i in range(levels - 1):
-        R = LS[levels - i - 2] + \
-            cv2.resize(R, (LS[levels - i - 2].shape[1],
-                           LS[levels - i - 2].shape[0]))
-    return R
+    img = LS[-1]
+    for lev_img in LS[-2::-1]:
+        img = cv2.pyrUp(img, lev_img.shape[1::-1])
+        img += lev_img
+    return img
 
 
-def multi_band_blending(img1, img2, mask, sigma=2.0, levels=None):
-    if sigma <= 0:
-        print "error: sigma should be a positive real number"
-        sys.exit()
-
-    max_levels = int(np.floor(
+def multi_band_blending(img1, img2, mask, leveln=6):
+    max_leveln = int(np.floor(
         np.log2(min(img1.shape[0], img1.shape[1], img2.shape[0], img2.shape[1]))))
-    if levels is None:
-        levels = max_levels
-    if levels < 1 or levels > max_levels:
-        print "warning: inappropriate number of levels"
-        levels = max_levels
+    if leveln is None:
+        leveln = max_leveln
+    if leveln < 1 or leveln > max_leveln:
+        print "warning: inappropriate number of leveln"
+        leveln = max_leveln
+
 
     # Get Gaussian pyramid and Laplacian pyramid
-    GPA = GaussianPyramid(img1.astype(np.float64), sigma, levels)
-    GPB = GaussianPyramid(img2.astype(np.float64), sigma, levels)
-    MP = GaussianPyramid(mask, sigma, levels)
-    LPA = LaplacianPyramid(GPA)
-    LPB = LaplacianPyramid(GPB)
+    MP = GaussianPyramid(mask, leveln)
+    LPA = LaplacianPyramid(img1.astype(np.float64), leveln)
+    LPB = LaplacianPyramid(img2.astype(np.float64), leveln)
 
     # Blend two Laplacian pyramidspass
     blended = blend_pyramid(LPA, LPB, MP)

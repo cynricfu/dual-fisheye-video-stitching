@@ -82,7 +82,7 @@ def main(input, output):
         labeled = warped1 * mask + warped2 * (1 - mask)
 
         # multi band blending
-        blended = utils.multi_band_blending(warped1, warped2, mask, 2.0)
+        blended = utils.multi_band_blending(warped1, warped2, mask, 6)
         cv2.imshow('p', blended.astype(np.uint8))
         cv2.waitKey(0)
 

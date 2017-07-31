@@ -42,21 +42,20 @@ def preprocess(img1, img2, overlap_w, flag_half):
     return subA, subB, mask
 
 
-def GaussianPyramid(img, sigma, levels):
+def GaussianPyramid(img, leveln):
     GP = [img]
-    for i in range(levels - 1):
-        GP.append(cv2.resize(cv2.GaussianBlur(
-            GP[i], (0, 0), sigmaX=sigma, sigmaY=sigma), (GP[i].shape[1] / 2, GP[i].shape[0] / 2)))
+    for i in range(leveln - 1):
+        GP.append(cv2.pyrDown(GP[i]))
     return GP
 
 
-def LaplacianPyramid(GP):
+def LaplacianPyramid(img, leveln):
     LP = []
-    for i, G in enumerate(GP):
-        if i == len(GP) - 1:
-            LP.append(G)
-        else:
-            LP.append(G - cv2.resize(GP[i + 1], (G.shape[1], G.shape[0])))
+    for i in range(leveln - 1):
+        next_img = cv2.pyrDown(img)
+        LP.append(img - cv2.pyrUp(next_img, img.shape[1::-1]))
+        img = next_img
+    LP.append(img)
     return LP
 
 
@@ -68,40 +67,33 @@ def blend_pyramid(LPA, LPB, MP):
 
 
 def reconstruct(LS):
-    levels = len(LS)
-    R = LS[levels - 1]
-    for i in range(levels - 1):
-        R = LS[levels - i - 2] + \
-            cv2.resize(R, (LS[levels - i - 2].shape[1],
-                           LS[levels - i - 2].shape[0]))
-    return R
+    img = LS[-1]
+    for lev_img in LS[-2::-1]:
+        img = cv2.pyrUp(img, lev_img.shape[1::-1])
+        img += lev_img
+    return img
 
 
-def multi_band_blending(img1, img2, overlap_w, sigma=2.0, levels=None, flag_half=False):
+def multi_band_blending(img1, img2, overlap_w, leveln=None, flag_half=False):
     if overlap_w < 0:
         print "error: overlap_w should be a positive integer"
-        sys.exit()
-    if sigma <= 0:
-        print "error: sigma should be a positive real number"
         sys.exit()
 
     subA, subB, mask = preprocess(img1, img2, overlap_w, flag_half)
 
-    max_levels = int(np.floor(
+    max_leveln = int(np.floor(
         np.log2(min(img1.shape[0], img1.shape[1], img2.shape[0], img2.shape[1]))))
-    if levels is None:
-        levels = max_levels
-    if levels < 1 or levels > max_levels:
-        print "warning: inappropriate number of levels"
-        levels = max_levels
+    if leveln is None:
+        leveln = max_leveln
+    if leveln < 1 or leveln > max_leveln:
+        print "warning: inappropriate number of leveln"
+        leveln = max_leveln
 
 
     # Get Gaussian pyramid and Laplacian pyramid
-    GPA = GaussianPyramid(subA, sigma, levels)
-    GPB = GaussianPyramid(subB, sigma, levels)
-    MP = GaussianPyramid(mask, sigma, levels)
-    LPA = LaplacianPyramid(GPA)
-    LPB = LaplacianPyramid(GPB)
+    MP = GaussianPyramid(mask, leveln)
+    LPA = LaplacianPyramid(subA, leveln)
+    LPB = LaplacianPyramid(subB, leveln)
 
 
     # Blend two Laplacian pyramidspass
@@ -127,9 +119,7 @@ if __name__ == '__main__':
                     help="path to the second (right) image")
     ap.add_argument('-o', '--overlap', required=True, type=int,
                     help="width of the overlapped area between two images, even number recommended")
-    ap.add_argument('-S', '--sigma', required=False, type=float, default=2.0,
-                    help="standard deviation of Gaussian function, 2.0 by default")
-    ap.add_argument('-l', '--levels', required=False, type=int,
+    ap.add_argument('-l', '--leveln', required=False, type=int,
                     help="number of levels of multi-band blending, calculated from image size if not provided")
     args = vars(ap.parse_args())
 
@@ -137,8 +127,7 @@ if __name__ == '__main__':
     img1 = cv2.imread(args['first'])
     img2 = cv2.imread(args['second'])
     overlap_w = args['overlap']
-    sigma = args['sigma']
-    levels = args['levels']
+    leveln = args['leveln']
 
-    result = multi_band_blending(img1, img2, overlap_w, sigma, levels, flag_half)
+    result = multi_band_blending(img1, img2, overlap_w, leveln, flag_half)
     cv2.imwrite('result.png', result)
