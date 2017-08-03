@@ -49,8 +49,8 @@ def getMatches_templmatch(img1, img2, templ_shape, max):
     Hs, Ws = img1.shape[:2]
     Ht, Wt = templ_shape
     matches = []
-    for yt in range(0, Hs - Ht + 1, 8):
-        for xt in range(0, Ws - Wt + 1):
+    for yt in range(0, Hs - Ht + 1, 64):
+        for xt in range(0, Ws - Wt + 1, 2):
             result = cv2.matchTemplate(
                 img1, img2[yt:yt + Ht, xt:xt + Wt], cv2.TM_CCOEFF_NORMED)
             minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
@@ -63,16 +63,59 @@ def getMatches_templmatch(img1, img2, templ_shape, max):
         return np.int32([c[1:] for c in matches])
 
 
-def imgLabeling2(img1, img2, img3, img4, xoffsetL, xoffsetR):
-    errL = np.sum(np.square(img1.astype(np.float64) -
-                            img2.astype(np.float64)), axis=2)
-    errR = np.sum(np.square(img3.astype(np.float64) -
-                            img4.astype(np.float64)), axis=2)
+def getMatches_goodtemplmatch(img1, img2, templ_shape, max):
+    if not np.array_equal(img1.shape, img2.shape):
+        print "error: inconsistent array dimention", img1.shape, img2.shape
+        sys.exit()
+    if not (np.all(templ_shape <= img1.shape[:2]) and np.all(templ_shape <= img2.shape[:2])):
+        print "error: template shape shall fit img1 and img2"
+        sys.exit()
+
+    feature_params = dict(maxCorners=max, qualityLevel=0.01,
+                          minDistance=5, blockSize=5)
+    kps1 = cv2.goodFeaturesToTrack(img1, mask=None, **feature_params)
+    kps2 = cv2.goodFeaturesToTrack(img2, mask=None, **feature_params)
+
+    Hs, Ws = img1.shape[:2]
+    Ht, Wt = templ_shape
+    matches = []
+    for [[xt, yt]] in kps1:
+        if int(yt) + Ht > Hs or int(xt) + Wt > Ws:
+            continue
+        result = cv2.matchTemplate(
+            img2, img1[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt], cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+        if maxVal > 0.85:
+            matches.append((maxVal, (int(xt), int(yt)), maxLoc))
+    for [[xt, yt]] in kps2:
+        if int(yt) + Ht > Hs or int(xt) + Wt > Ws:
+            continue
+        result = cv2.matchTemplate(
+            img1, img2[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt], cv2.TM_CCOEFF_NORMED)
+        minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
+        if maxVal > 0.85:
+            matches.append((maxVal, maxLoc, (int(xt), int(yt))))
+    matches.sort(key=lambda e: e[0], reverse=True)
+    if len(matches) >= max:
+        return np.int32([matches[i][1:] for i in range(max)])
+    else:
+        return np.int32([c[1:] for c in matches])
+
+
+def imgLabeling2(img1, img2, img3, img4, maskSize, xoffsetL, xoffsetR):
+    if len(img1.shape) == 3:
+        errL = np.sum(np.square(img1.astype(np.float64) -
+                                img2.astype(np.float64)), axis=2)
+        errR = np.sum(np.square(img3.astype(np.float64) -
+                                img4.astype(np.float64)), axis=2)
+    else:
+        errL = np.square(img1.astype(np.float64) - img2.astype(np.float64))
+        errR = np.square(img3.astype(np.float64) - img4.astype(np.float64))
     EL = np.zeros(errL.shape, np.float64)
     ER = np.zeros(errR.shape, np.float64)
     EL[0] = errL[0]
     ER[0] = errR[0]
-    for i in range(1, 1280):
+    for i in range(1, maskSize[1]):
         EL[i, 0] = errL[i, 0] + min(EL[i - 1, 0], EL[i - 1, 1])
         ER[i, 0] = errR[i, 0] + min(ER[i - 1, 0], ER[i - 1, 1])
         for j in range(1, EL.shape[1] - 1):
@@ -85,8 +128,8 @@ def imgLabeling2(img1, img2, img3, img4, xoffsetL, xoffsetR):
 
     minlocL = np.argmin(EL, axis=1) + xoffsetL
     minlocR = np.argmin(ER, axis=1) + xoffsetR
-    mask = np.ones((1280, 2560, 3), np.float64)
-    for i in range(1280):
+    mask = np.ones((maskSize[1], maskSize[0], 3), np.float64)
+    for i in range(maskSize[1]):
         mask[i, minlocL[i]:minlocR[i]] = 0
         mask[i, minlocL[i]] = 0.5
         mask[i, minlocR[i]] = 0.5
@@ -134,12 +177,10 @@ def multi_band_blending(img1, img2, mask, leveln=6):
         print "warning: inappropriate number of leveln"
         leveln = max_leveln
 
-
     # Get Gaussian pyramid and Laplacian pyramid
     MP = GaussianPyramid(mask, leveln)
     LPA = LaplacianPyramid(img1.astype(np.float64), leveln)
     LPB = LaplacianPyramid(img2.astype(np.float64), leveln)
-
     # Blend two Laplacian pyramidspass
     blended = blend_pyramid(LPA, LPB, MP)
 
@@ -149,3 +190,24 @@ def multi_band_blending(img1, img2, mask, leveln=6):
     result[result < 0] = 0
 
     return result
+
+
+def verticalBoundary(M, W_remap, W, H):
+    row = np.zeros((W_remap, 3, 1))
+    row[:, 2] = 1
+    row[:, 0] = np.arange(
+        (W - W_remap) / 2, (W + W_remap) / 2).reshape((W_remap, 1))
+    product = np.matmul(M, row).reshape((W_remap, 3))
+    normed = np.array(
+        zip(product[:, 0] / product[:, 2], product[:, 1] / product[:, 2]))
+    top = np.max(normed[np.logical_and(normed[:, 0] >=
+                                       W_remap / 2, normed[:, 0] < W - W_remap / 2)][:, 1])
+
+    row[:, 1] = H - 1
+    product = np.matmul(M, row).reshape((W_remap, 3))
+    normed = np.array(
+        zip(product[:, 0] / product[:, 2], product[:, 1] / product[:, 2]))
+    bottom = np.min(normed[np.logical_and(
+        normed[:, 0] >= W_remap / 2, normed[:, 0] < W - W_remap / 2)][:, 1])
+
+    return int(top) if top > 0 else 0, int(bottom) if bottom < H else H

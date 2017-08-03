@@ -8,11 +8,13 @@ import utils
 
 
 # parameters for template matching
-W_max = 1380
-offsetYL = 320
-offsetYR = 320
-maxL = 160
-maxR = 160
+W = 1280
+H = 640
+W_remap = 690
+offsetYL = 80
+offsetYR = 80
+maxL = 80
+maxR = 80
 
 
 def main(input, output):
@@ -20,11 +22,11 @@ def main(input, output):
 
     # Define the codec and create VideoWriter object
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    out = cv2.VideoWriter(output, fourcc, 30.0, (2560, 1280))
+    out = cv2.VideoWriter(output, fourcc, 30.0, (W, H))
 
     # Obtain xmap and ymap
     xmap, ymap = utils.buildmap_2(
-        Ws=W_max, Hs=1280, Wd=1280, Hd=1280, fov=194.0)
+        Ws=W_remap, Hs=H, Wd=1280, Hd=1280, fov=194.0)
 
     # Calculate homography from the first frame
     ret, frame = cap.read()
@@ -32,57 +34,69 @@ def main(input, output):
         # defish / unwarp
         cam1 = cv2.remap(frame[:, :1280], xmap, ymap, cv2.INTER_LINEAR)
         cam2 = cv2.remap(frame[:, 1280:], xmap, ymap, cv2.INTER_LINEAR)
+        cam1_gray = cv2.cvtColor(cam1, cv2.COLOR_BGR2GRAY)
+        cam2_gray = cv2.cvtColor(cam2, cv2.COLOR_BGR2GRAY)
 
         # shift the remapped images along x-axis
-        shifted_cams = np.zeros((2560, 2560, 3), np.uint8)
-        shifted_cams[1280:, (2560 - W_max) / 2:(2560 + W_max) / 2] = cam2
-        shifted_cams[:1280, :W_max / 2] = cam1[:, W_max / 2:]
-        shifted_cams[:1280, 2560 - W_max / 2:] = cam1[:, :W_max / 2]
+        shifted_cams = np.zeros((H * 2, W, 3), np.uint8)
+        shifted_cams[H:, (W - W_remap) / 2:(W + W_remap) / 2] = cam2
+        shifted_cams[:H, :W_remap / 2] = cam1[:, W_remap / 2:]
+        shifted_cams[:H, W - W_remap / 2:] = cam1[:, :W_remap / 2]
 
         # find matches and extract pairs of correspondent matching points
-        matchesL = utils.getMatches_templmatch(
-            cam1[offsetYL:1280 - offsetYL, 1280:],
-            cam2[offsetYL:1280 - offsetYL, :W_max - 1280],
-            (32, 16), maxL)
-        matchesR = utils.getMatches_templmatch(
-            cam1[offsetYR:1280 - offsetYR, :W_max - 1280],
-            cam2[offsetYR:1280 - offsetYR, 1280:],
-            (32, 16), maxR)
+        matchesL = utils.getMatches_goodtemplmatch(
+            cam1_gray[offsetYL:H - offsetYL, W / 2:],
+            cam2_gray[offsetYL:H - offsetYL, :W_remap - W / 2],
+            (16, 8), maxL)
+        matchesR = utils.getMatches_goodtemplmatch(
+            cam2_gray[offsetYR:H - offsetYR, W / 2:],
+            cam1_gray[offsetYR:H - offsetYR, :W_remap - W / 2],
+            (16, 8), maxR)
+        matchesR = matchesR[:, -1::-1]
         print matchesL.shape[0], matchesR.shape[0]
 
-        matchesL = matchesL + ((2560 - W_max) / 2, offsetYL)
-        matchesR = matchesR + ((2560 - W_max) / 2 + 1280, offsetYR)
+        matchesL = matchesL + ((W - W_remap) / 2, offsetYL)
+        matchesR = matchesR + ((W - W_remap) / 2 + W / 2, offsetYR)
         zipped_matches = zip(matchesL, matchesR)
         matches = np.int32([e for i in zipped_matches for e in i])
         pts1 = matches[:, 0]
         pts2 = matches[:, 1]
 
         # find homography matrix from pairs of correspondent matching points
-        H, status = cv2.findHomography(pts2, pts1, cv2.RANSAC, 2.0)
-        print H
+        M, status = cv2.findHomography(pts2, pts1, cv2.RANSAC, 2.0)
+        print M
 
-        # warp cam2 using H
-        warped2 = cv2.warpPerspective(shifted_cams[1280:], H, (2560, 1280))
-        warped1 = np.zeros((1280, 2560, 3), np.uint8)
-        warped1[:, :W_max / 2] = cam1[:, W_max / 2:]
-        warped1[:, 2560 - W_max / 2:] = cam1[:, :W_max / 2]
-        warped = np.zeros((1280, 2560, 3), np.uint8)
+        # warp cam2 using M
+        warped2 = cv2.warpPerspective(shifted_cams[H:], M, (W, H))
+        warped1 = np.zeros((H, W, 3), np.uint8)
+        warped1[:, :W_remap / 2] = cam1[:, W_remap / 2:]
+        warped1[:, W - W_remap / 2:] = cam1[:, :W_remap / 2]
+        warped = np.zeros((H, W, 3), np.uint8)
         warped[:] = warped2[:]
-        warped[:, :W_max / 2] = warped1[:, :W_max / 2]
-        warped[:, 2560 - W_max / 2:] = warped1[:, 2560 - W_max / 2:]
+        warped[:, :W_remap / 2] = warped1[:, :W_remap / 2]
+        warped[:, W - W_remap / 2:] = warped1[:, W - W_remap / 2:]
+
+        # calculate vertical boundary of warped image, for later cropping
+        top, bottom = utils.verticalBoundary(M, W_remap, W, H)
+        print top, bottom
+
+        # crop to get a largest rectangle, and resize to maintain resolution
+        warped1 = cv2.resize(warped1[top:bottom], (W, H))
+        warped2 = cv2.resize(warped2[top:bottom], (W, H))
 
         # image labeling (find minimum error boundary cut)
-        mask = utils.imgLabeling2(warped1[:, W_max / 2 - 80:W_max / 2],
-                                 warped2[:, W_max / 2 - 80:W_max / 2],
-                                 warped1[:, 2560 - W_max /
-                                         2:2560 - W_max / 2 + 80],
-                                 warped2[:, 2560 - W_max /
-                                         2:2560 - W_max / 2 + 80],
-                                 W_max / 2 - 80, 2560 - W_max / 2)
+        mask = utils.imgLabeling2(warped1[:, W_remap / 2 - 40:W_remap / 2],
+                                  warped2[:, W_remap / 2 - 40:W_remap / 2],
+                                  warped1[:, W - W_remap /
+                                          2:W - W_remap / 2 + 40],
+                                  warped2[:, W - W_remap /
+                                          2:W - W_remap / 2 + 40],
+                                  (W, H), W_remap / 2 - 40, W - W_remap / 2)
         labeled = warped1 * mask + warped2 * (1 - mask)
 
         # multi band blending
         blended = utils.multi_band_blending(warped1, warped2, mask, 6)
+
         cv2.imshow('p', blended.astype(np.uint8))
         cv2.waitKey(0)
 
@@ -99,23 +113,45 @@ def main(input, output):
     while(cap.isOpened()):
         ret, frame = cap.read()
         if ret == True:
-            # remap
+            # defish / unwarp
             cam1 = cv2.remap(frame[:, :1280], xmap, ymap, cv2.INTER_LINEAR)
             cam2 = cv2.remap(frame[:, 1280:], xmap, ymap, cv2.INTER_LINEAR)
 
-            # place the remapped images
-            shifted_cams = np.zeros((2560, 2560, 3), np.uint8)
-            shifted_cams[1280:, (2560 - W_max) / 2:(2560 + W_max) / 2] = cam2
-            shifted_cams[:1280, :W_max / 2] = cam1[:, W_max / 2:]
-            shifted_cams[:1280, 2560 - W_max / 2:] = cam1[:, :W_max / 2]
+            # shift the remapped images along x-axis
+            shifted_cams = np.zeros((H * 2, W, 3), np.uint8)
+            shifted_cams[H:, (W - W_remap) / 2:(W + W_remap) / 2] = cam2
+            shifted_cams[:H, :W_remap / 2] = cam1[:, W_remap / 2:]
+            shifted_cams[:H, W - W_remap / 2:] = cam1[:, :W_remap / 2]
 
-            warped = cv2.warpPerspective(shifted_cams[1280:], H, (2560, 1280))
-            warped[:1280, :W_max / 2] = cam1[:, W_max / 2:]
-            warped[:1280, 2560 - W_max / 2:] = cam1[:, :W_max / 2]
+            # warp cam2 using M
+            warped2 = cv2.warpPerspective(shifted_cams[H:], M, (W, H))
+            warped1 = np.zeros((H, W, 3), np.uint8)
+            warped1[:, :W_remap / 2] = cam1[:, W_remap / 2:]
+            warped1[:, W - W_remap / 2:] = cam1[:, :W_remap / 2]
+            warped = np.zeros((H, W, 3), np.uint8)
+            warped[:] = warped2[:]
+            warped[:, :W_remap / 2] = warped1[:, :W_remap / 2]
+            warped[:, W - W_remap / 2:] = warped1[:, W - W_remap / 2:]
+
+            # crop to get a largest rectangle, and resize to maintain resolution
+            warped1 = cv2.resize(warped1[top:bottom], (W, H))
+            warped2 = cv2.resize(warped2[top:bottom], (W, H))
+            
+            # image labeling (find minimum error boundary cut)
+            mask = utils.imgLabeling2(warped1[:, W_remap / 2 - 40:W_remap / 2],
+                                      warped2[:, W_remap / 2 - 40:W_remap / 2],
+                                      warped1[:, W - W_remap /
+                                              2:W - W_remap / 2 + 40],
+                                      warped2[:, W - W_remap /
+                                              2:W - W_remap / 2 + 40],
+                                      (W, H), W_remap / 2 - 40, W - W_remap / 2)
+            labeled = warped1 * mask + warped2 * (1 - mask)
+            # multi band blending
+            blended = utils.multi_band_blending(warped1, warped2, mask, 7)
 
             # Write the remapped frame
-            out.write(warped.astype(np.uint8))
-            cv2.imshow('warped', warped)
+            out.write(blended.astype(np.uint8))
+            cv2.imshow('warped', blended.astype(np.uint8))
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
         else:
