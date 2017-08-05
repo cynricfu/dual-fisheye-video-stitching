@@ -28,7 +28,7 @@ def main(input, output):
     xmap, ymap = utils.buildmap_2(
         Ws=W_remap, Hs=H, Wd=1280, Hd=1280, fov=194.0)
 
-    # Calculate homography from the first frame
+    # Calculate homography and other params from the first frame
     ret, frame = cap.read()
     if ret == True:
         # defish / unwarp
@@ -68,13 +68,7 @@ def main(input, output):
 
         # warp cam2 using M
         warped2 = cv2.warpPerspective(shifted_cams[H:], M, (W, H))
-        warped1 = np.zeros((H, W, 3), np.uint8)
-        warped1[:, :W_remap / 2] = cam1[:, W_remap / 2:]
-        warped1[:, W - W_remap / 2:] = cam1[:, :W_remap / 2]
-        warped = np.zeros((H, W, 3), np.uint8)
-        warped[:] = warped2[:]
-        warped[:, :W_remap / 2] = warped1[:, :W_remap / 2]
-        warped[:, W - W_remap / 2:] = warped1[:, W - W_remap / 2:]
+        warped1 = shifted_cams[:H]
 
         # calculate vertical boundary of warped image, for later cropping
         top, bottom = utils.verticalBoundary(M, W_remap, W, H)
@@ -94,6 +88,14 @@ def main(input, output):
                                   (W, H), W_remap / 2 - 40, W - W_remap / 2)
         labeled = warped1 * mask + warped2 * (1 - mask)
 
+        # fill empty area of warped1 and warped2, to avoid darkening
+        warped1[:, W_remap / 2:W - W_remap /
+                2] = warped2[:, W_remap / 2:W - W_remap / 2]
+        EAof2 = np.zeros((H, W, 3), np.float32)
+        EAof2[:, (W-W_remap) / 2:(W + W_remap) / 2] = 1
+        EAof2 = cv2.warpPerspective(EAof2, M, (W, H))
+        warped2[EAof2 == 0] = warped1[EAof2 == 0]
+
         # multi band blending
         blended = utils.multi_band_blending(warped1, warped2, mask, 6)
 
@@ -105,7 +107,7 @@ def main(input, output):
         cv2.imwrite('1.png', cam2)
         cv2.imwrite('2.png', shifted_cams)
         cv2.imwrite('3.png', warped2)
-        cv2.imwrite('4.png', warped)
+        cv2.imwrite('4.png', warped1)
         cv2.imwrite('labeled.png', labeled.astype(np.uint8))
         cv2.imwrite('blended.png', blended.astype(np.uint8))
 
@@ -125,18 +127,12 @@ def main(input, output):
 
             # warp cam2 using M
             warped2 = cv2.warpPerspective(shifted_cams[H:], M, (W, H))
-            warped1 = np.zeros((H, W, 3), np.uint8)
-            warped1[:, :W_remap / 2] = cam1[:, W_remap / 2:]
-            warped1[:, W - W_remap / 2:] = cam1[:, :W_remap / 2]
-            warped = np.zeros((H, W, 3), np.uint8)
-            warped[:] = warped2[:]
-            warped[:, :W_remap / 2] = warped1[:, :W_remap / 2]
-            warped[:, W - W_remap / 2:] = warped1[:, W - W_remap / 2:]
+            warped1 = shifted_cams[:H]
 
             # crop to get a largest rectangle, and resize to maintain resolution
             warped1 = cv2.resize(warped1[top:bottom], (W, H))
             warped2 = cv2.resize(warped2[top:bottom], (W, H))
-            
+
             # image labeling (find minimum error boundary cut)
             mask = utils.imgLabeling2(warped1[:, W_remap / 2 - 40:W_remap / 2],
                                       warped2[:, W_remap / 2 - 40:W_remap / 2],
@@ -146,8 +142,14 @@ def main(input, output):
                                               2:W - W_remap / 2 + 40],
                                       (W, H), W_remap / 2 - 40, W - W_remap / 2)
             labeled = warped1 * mask + warped2 * (1 - mask)
+
+            # fill empty area of warped1 and warped2, to avoid darkening
+            warped1[:, W_remap / 2:W - W_remap /
+                    2] = warped2[:, W_remap / 2:W - W_remap / 2]
+            warped2[EAof2 == 0] = warped1[EAof2 == 0]
+
             # multi band blending
-            blended = utils.multi_band_blending(warped1, warped2, mask, 7)
+            blended = utils.multi_band_blending(warped1, warped2, mask, 6)
 
             # Write the remapped frame
             out.write(blended.astype(np.uint8))
