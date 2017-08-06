@@ -42,7 +42,8 @@ def getMatches_templmatch(img1, img2, templ_shape, max):
     if not np.array_equal(img1.shape, img2.shape):
         print "error: inconsistent array dimention", img1.shape, img2.shape
         sys.exit()
-    if not (np.all(templ_shape <= img1.shape[:2]) and np.all(templ_shape <= img2.shape[:2])):
+    if not (np.all(templ_shape <= img1.shape[:2]) and
+            np.all(templ_shape <= img2.shape[:2])):
         print "error: template shape shall fit img1 and img2"
         sys.exit()
 
@@ -67,7 +68,8 @@ def getMatches_goodtemplmatch(img1, img2, templ_shape, max):
     if not np.array_equal(img1.shape, img2.shape):
         print "error: inconsistent array dimention", img1.shape, img2.shape
         sys.exit()
-    if not (np.all(templ_shape <= img1.shape[:2]) and np.all(templ_shape <= img2.shape[:2])):
+    if not (np.all(templ_shape <= img1.shape[:2]) and
+            np.all(templ_shape <= img2.shape[:2])):
         print "error: template shape shall fit img1 and img2"
         sys.exit()
 
@@ -83,7 +85,8 @@ def getMatches_goodtemplmatch(img1, img2, templ_shape, max):
         if int(yt) + Ht > Hs or int(xt) + Wt > Ws:
             continue
         result = cv2.matchTemplate(
-            img2, img1[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt], cv2.TM_CCOEFF_NORMED)
+            img2, img1[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt],
+            cv2.TM_CCOEFF_NORMED)
         minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
         if maxVal > 0.85:
             matches.append((maxVal, (int(xt), int(yt)), maxLoc))
@@ -91,7 +94,8 @@ def getMatches_goodtemplmatch(img1, img2, templ_shape, max):
         if int(yt) + Ht > Hs or int(xt) + Wt > Ws:
             continue
         result = cv2.matchTemplate(
-            img1, img2[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt], cv2.TM_CCOEFF_NORMED)
+            img1, img2[int(yt):int(yt) + Ht, int(xt):int(xt) + Wt],
+            cv2.TM_CCOEFF_NORMED)
         minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(result)
         if maxVal > 0.85:
             matches.append((maxVal, maxLoc, (int(xt), int(yt))))
@@ -170,8 +174,8 @@ def reconstruct(LS):
 
 
 def multi_band_blending(img1, img2, mask, leveln=6):
-    max_leveln = int(np.floor(
-        np.log2(min(img1.shape[0], img1.shape[1], img2.shape[0], img2.shape[1]))))
+    max_leveln = int(np.floor(np.log2(min(img1.shape[0], img1.shape[1],
+                                          img2.shape[0], img2.shape[1]))))
     if leveln is None:
         leveln = max_leveln
     if leveln < 1 or leveln > max_leveln:
@@ -201,8 +205,8 @@ def verticalBoundary(M, W_remap, W, H):
     product = np.matmul(M, row).reshape((W_remap, 3))
     normed = np.array(
         zip(product[:, 0] / product[:, 2], product[:, 1] / product[:, 2]))
-    top = np.max(normed[np.logical_and(normed[:, 0] >=
-                                       W_remap / 2, normed[:, 0] < W - W_remap / 2)][:, 1])
+    top = np.max(normed[np.logical_and(normed[:, 0] >= W_remap / 2,
+                                       normed[:, 0] < W - W_remap / 2)][:, 1])
 
     row[:, 1] = H - 1
     product = np.matmul(M, row).reshape((W_remap, 3))

@@ -1,10 +1,9 @@
 #!/usr/bin/python
 import numpy as np
 import cv2
-import sys
 import argparse
-import random
 import utils
+import graphcut
 
 
 # parameters for template matching
@@ -30,7 +29,7 @@ def main(input, output):
 
     # Calculate homography and other params from the first frame
     ret, frame = cap.read()
-    if ret == True:
+    if ret:
         # defish / unwarp
         cam1 = cv2.remap(frame[:, :1280], xmap, ymap, cv2.INTER_LINEAR)
         cam2 = cv2.remap(frame[:, 1280:], xmap, ymap, cv2.INTER_LINEAR)
@@ -86,13 +85,19 @@ def main(input, output):
                                   warped2[:, W - W_remap /
                                           2:W - W_remap / 2 + 40],
                                   (W, H), W_remap / 2 - 40, W - W_remap / 2)
+        mask = graphcut.find_graph_cut(
+            warped1[:, W_remap / 2 - 40:W_remap / 2],
+            warped2[:, W_remap / 2 - 40:W_remap / 2],
+            warped1[:, W - W_remap / 2:W - W_remap / 2 + 40],
+            warped2[:, W - W_remap / 2:W - W_remap / 2 + 40],
+            (W, H), W_remap / 2 - 40, W - W_remap / 2)
         labeled = warped1 * mask + warped2 * (1 - mask)
 
         # fill empty area of warped1 and warped2, to avoid darkening
         warped1[:, W_remap / 2:W - W_remap /
                 2] = warped2[:, W_remap / 2:W - W_remap / 2]
-        EAof2 = np.zeros((H, W, 3), np.float32)
-        EAof2[:, (W-W_remap) / 2:(W + W_remap) / 2] = 1
+        EAof2 = np.zeros((H, W, 3), np.uint8)
+        EAof2[:, (W - W_remap) / 2 + 1:(W + W_remap) / 2 - 1] = 255
         EAof2 = cv2.warpPerspective(EAof2, M, (W, H))
         warped2[EAof2 == 0] = warped1[EAof2 == 0]
 
@@ -114,7 +119,7 @@ def main(input, output):
     # Process each frame
     while(cap.isOpened()):
         ret, frame = cap.read()
-        if ret == True:
+        if ret:
             # defish / unwarp
             cam1 = cv2.remap(frame[:, :1280], xmap, ymap, cv2.INTER_LINEAR)
             cam2 = cv2.remap(frame[:, 1280:], xmap, ymap, cv2.INTER_LINEAR)
@@ -129,7 +134,8 @@ def main(input, output):
             warped2 = cv2.warpPerspective(shifted_cams[H:], M, (W, H))
             warped1 = shifted_cams[:H]
 
-            # crop to get a largest rectangle, and resize to maintain resolution
+            # crop to get a largest rectangle
+            # and resize to maintain resolution
             warped1 = cv2.resize(warped1[top:bottom], (W, H))
             warped2 = cv2.resize(warped2[top:bottom], (W, H))
 
@@ -140,7 +146,8 @@ def main(input, output):
                                               2:W - W_remap / 2 + 40],
                                       warped2[:, W - W_remap /
                                               2:W - W_remap / 2 + 40],
-                                      (W, H), W_remap / 2 - 40, W - W_remap / 2)
+                                      (W, H), W_remap / 2 - 40,
+                                      W - W_remap / 2)
             labeled = warped1 * mask + warped2 * (1 - mask)
 
             # fill empty area of warped1 and warped2, to avoid darkening
@@ -168,10 +175,12 @@ def main(input, output):
 if __name__ == '__main__':
     # construct the argument parse and parse the arguments
     ap = argparse.ArgumentParser(
-        description="A summer research project to seamlessly stitch dual-fisheye video into 360-degree videos")
+        description="A summer research project to seamlessly stitch \
+                     dual-fisheye video into 360-degree videos")
     ap.add_argument('input', metavar='INPUT.XYZ',
                     help="path to the input dual fisheye video")
-    ap.add_argument('-o', '--output', metavar='OUTPUT.XYZ', required=False, default='output.MP4',
+    ap.add_argument('-o', '--output', metavar='OUTPUT.XYZ', required=False,
+                    default='output.MP4',
                     help="path to the output equirectangular video")
 
     args = vars(ap.parse_args())
