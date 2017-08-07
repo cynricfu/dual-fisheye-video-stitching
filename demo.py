@@ -91,6 +91,12 @@ def main(input, output):
             warped1[:, W - W_remap / 2:W - W_remap / 2 + 40],
             warped2[:, W - W_remap / 2:W - W_remap / 2 + 40],
             (W, H), W_remap / 2 - 40, W - W_remap / 2)
+        mask, minloc_old = utils.imgLabeling3(
+            warped1[:, W_remap / 2 - 40:W_remap / 2],
+            warped2[:, W_remap / 2 - 40:W_remap / 2],
+            warped1[:, W - W_remap / 2:W - W_remap / 2 + 40],
+            warped2[:, W - W_remap / 2:W - W_remap / 2 + 40],
+            (W, H), W_remap / 2 - 40, W - W_remap / 2)
         labeled = warped1 * mask + warped2 * (1 - mask)
 
         # fill empty area of warped1 and warped2, to avoid darkening
@@ -148,6 +154,12 @@ def main(input, output):
                                               2:W - W_remap / 2 + 40],
                                       (W, H), W_remap / 2 - 40,
                                       W - W_remap / 2)
+            mask, minloc_old = utils.imgLabeling3(
+                warped1[:, W_remap / 2 - 40:W_remap / 2],
+                warped2[:, W_remap / 2 - 40:W_remap / 2],
+                warped1[:, W - W_remap / 2:W - W_remap / 2 + 40],
+                warped2[:, W - W_remap / 2:W - W_remap / 2 + 40],
+                (W, H), W_remap / 2 - 40, W - W_remap / 2, minloc_old)
             labeled = warped1 * mask + warped2 * (1 - mask)
 
             # fill empty area of warped1 and warped2, to avoid darkening
