@@ -7,12 +7,12 @@ A summer research project to seamlessly stitch dual-fisheye video into 360-degre
 ## Dependencies
 
 * Python 2.7+
-* OpenCV 3.2.0
+* OpenCV 3.3.0
 
 ## Run
 
 ```
-python demo.py [-h] [-o OUTPUT.XYZ] INPUT.XYZ
+python main.py [-h] [-o OUTPUT.XYZ] INPUT.XYZ
 ```
 
 ```
@@ -24,13 +24,3 @@ optional arguments:
   -o OUTPUT.XYZ, --output OUTPUT.XYZ
                         path to the output equirectangular video
 ```
-
-## References
-
-http://www.kscottz.com/fish-eye-lens-dewarping-and-panorama-stiching/
-
-https://trac.ffmpeg.org/wiki/RemapFilter
-
-http://www.pyimagesearch.com/2016/01/11/opencv-panorama-stitching/
-
-https://support.google.com/youtube/answer/6178631?hl=en
