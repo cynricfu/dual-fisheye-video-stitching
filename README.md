@@ -1,8 +1,6 @@
 # SummerResearch
 
-## Introduction
-
-A summer research project to seamlessly stitch dual-fisheye video into 360-degree videos.
+A summer research project to seamlessly stitch dual-fisheye video into 360-degree videos using OpenCV-Python.
 
 ## Dependencies
 
